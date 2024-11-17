@@ -1,81 +1,58 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { Repository, Timestamp } from 'typeorm';
 import { User } from './entities/user.entity';
-import { InjectRepository } from '@nestjs/typeorm';
-import { hashSync } from 'bcrypt';
+import { UserRepository } from './repositories/user.repository';
 
 @Injectable()
 export class UsersService {
-  constructor(
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-  ) {}
+  constructor(private readonly userRepository: UserRepository) {}
 
-  async create(createUserDto: CreateUserDto) {
-    const hashedPassword = hashSync(createUserDto.password, 12);
+  async create(createUserDto: CreateUserDto): Promise<User> {
+    if (await this.userRepository.isEmailExist(createUserDto.email)) {
+      throw new ConflictException('Email already exists');
+    }
 
-    const newUser = this.userRepository.create({
-      ...createUserDto,
-      password: hashedPassword,
-    });
-
-    await this.userRepository.save(newUser).catch((error) => {
-      throw new InternalServerErrorException('Create fail');
-    });
-    delete newUser.password;
-    return newUser;
+    return await this.userRepository.create(createUserDto);
   }
 
-  async findAll() {
-    const users = await this.userRepository
-      .createQueryBuilder()
-      .select(['id', 'name', 'email'])
-      .where({ isActive: true })
-      .execute()
-      .catch((error) => {
-        throw new InternalServerErrorException('Fetch fail');
-      });
-    return users;
+  async findAll(): Promise<User[]> {
+    return await this.userRepository.findAll();
   }
 
-  async findOne(filter: any): Promise<User> {
-    return await this.userRepository
-      .findOne({ where: { ...filter, isActive: true } })
-      .catch((error) => {
-        throw new InternalServerErrorException('Fetch fail');
-      });
+  async findOne(
+    options: Partial<{ id?: string; email?: string }>,
+  ): Promise<User> {
+    const user = options.id
+      ? await this.userRepository.findOneById(options.id)
+      : await this.userRepository.findOneByEmail(options.email);
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto) {
-    return await this.userRepository
-      .update(id, updateUserDto)
-      .catch((error) => {
-        throw new InternalServerErrorException('Update fail');
-      });
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
+    await this.validateIdExist(id);
+
+    return await this.userRepository.update(id, updateUserDto);
   }
 
-  async remove(id: string) {
-    return await this.userRepository
-      .update(id, {
-        isActive: false,
-        deletedAt: new Date(),
-      })
-      .catch((error) => {
-        throw new InternalServerErrorException('Delete fail');
-      });
+  async remove(id: string): Promise<User> {
+    await this.validateIdExist(id);
+
+    return await this.userRepository.delete(id);
   }
 
-  async emailExist(email: string) {
-    return await this.userRepository.existsBy({ email }).catch((error) => {
-      throw new InternalServerErrorException('Fetch fail');
-    });
-  }
-
-  async idExist(id: string) {
-    return await this.userRepository.existsBy({ id }).catch((error) => {
-      throw new InternalServerErrorException('Fetch fail');
-    });
+  private async validateIdExist(id: string): Promise<void> {
+    if (!(await this.userRepository.isIdExist(id))) {
+      throw new NotFoundException('User not found');
+    }
   }
 }

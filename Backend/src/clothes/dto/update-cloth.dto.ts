@@ -1,4 +1,5 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { CreateClothDto } from './create-cloth.dto';
+import { CreateClothRequestDto } from './create-cloth.dto';
+import { Exclude, Expose, Transform } from 'class-transformer';
 
-export class UpdateClothDto extends PartialType(CreateClothDto) {}
+export class UpdateClothRequestDto extends PartialType(CreateClothRequestDto) {}

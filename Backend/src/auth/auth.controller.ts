@@ -1,9 +1,8 @@
 import {
   Body,
-  ConflictException,
   Controller,
   Get,
-  NotFoundException,
+  HttpCode,
   Post,
   Request,
   UseGuards,
@@ -14,6 +13,7 @@ import { UsersService } from 'src/users/users.service';
 import { LocalGuard } from './guards/local-auth.guard';
 import { User } from 'src/users/entities/user.entity';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { plainToInstance } from 'class-transformer';
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -23,24 +23,23 @@ export class AuthController {
 
   @Post('/login')
   @UseGuards(LocalGuard)
-  async login(@Request() req) {
+  @HttpCode(200)
+  login(@Request() req) {
     const user: User = req.user;
 
-    if (!user) throw new NotFoundException('User not found');
-
-    return await this.authService.getAccessToken(user);
+    return { access_token: this.authService.getAccessToken(user) };
   }
 
   @Post('/register')
+  @HttpCode(201)
   async register(@Body() registerUserDto: RegisterUserDto) {
-    if (await this.usersService.emailExist(registerUserDto.email)) {
-      throw new ConflictException('Email already in use');
-    }
+    const user = await this.usersService.create(registerUserDto);
 
-    return this.usersService.create(registerUserDto);
+    return plainToInstance(User, user);
   }
 
   @Get()
+  @HttpCode(200)
   @UseGuards(JwtAuthGuard)
   async status(@Request() req) {
     return req.user;
